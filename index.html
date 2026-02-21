@@ -2,33 +2,58 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>PetalStorm.io – Real Florr Petals & Bugs</title>
+    <title>PetalStorm.io – Level + Crafting + Real Florr Petals</title>
     <style>
         body { margin:0; background:#111; font-family:Arial; color:#fff; text-align:center; overflow:hidden; }
         canvas { display:block; margin:20px auto; border:4px solid #333; box-shadow:0 0 30px #0f0; }
-        #ui { position:absolute; top:10px; left:10px; background:rgba(0,0,0,0.7); padding:12px; border-radius:10px; font-size:15px; }
-        #petalsList { position:absolute; top:10px; right:10px; background:rgba(0,0,0,0.7); padding:8px; border-radius:8px; max-width:220px; font-size:13px; }
+        #ui { position:absolute; top:10px; left:10px; background:rgba(0,0,0,0.75); padding:12px 16px; border-radius:10px; font-size:15px; line-height:1.35; }
+        #petalsList { position:absolute; top:10px; right:10px; background:rgba(0,0,0,0.75); padding:10px; border-radius:8px; max-width:240px; font-size:13px; line-height:1.4; }
+        #craftMenu { 
+            display:none; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+            background:rgba(15,25,35,0.97); padding:25px; border-radius:18px; border:6px solid #0ff;
+            color:#fff; width:400px; text-align:center; box-shadow:0 0 50px #0ff;
+        }
+        button { background:#0f0; color:#000; font-weight:bold; padding:14px 28px; margin:8px; border:none; border-radius:10px; cursor:pointer; font-size:16px; }
+        button:hover { background:#4f4; }
     </style>
 </head>
 <body>
     <canvas id="c" width="1000" height="700"></canvas>
     <div id="ui">
         Score: <span id="score">0</span> | Kills: <span id="kills">0</span><br>
-        Health: <span id="health">300</span>/<span id="maxhealth">300</span>
+        Level <span id="level">1</span> XP <span id="xp">0</span>/<span id="nextxp">920</span><br>
+        Health <span id="health">300</span>/<span id="maxhealth">300</span> Slots <span id="slots">5/5</span>
     </div>
     <div id="petalsList"></div>
+
+    <div id="craftMenu">
+        <h2 style="margin:0 0 18px 0;color:#0ff">🌟 CRAFTING LAB 🌟</h2>
+        <div id="craftInfo" style="background:#0004;padding:14px;border-radius:10px;margin-bottom:20px;font-size:14px;text-align:left;"></div>
+        <button onclick="performCraft()">Fuse 3 Identical → Next Rarity</button><br>
+        <button onclick="closeCraft()" style="background:#555">Close (ESC)</button>
+        <p style="margin-top:20px;font-size:13px;opacity:0.75;">3 petals of the EXACT same type + rarity = 1 higher-rarity version of that petal</p>
+    </div>
+
     <div id="instructions" style="position:absolute;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);padding:8px 20px;border-radius:8px;font-size:14px;">
-        MOUSE = move • Kill bugs for huge loot • Real Florr petals with abilities!
+        MOUSE = move • C = Crafting • Real petals + levels + body damage!
     </div>
 
 <script>
-// ====================== PETALSTORM.IO v2 – Real Florr Petals & Bugs ======================
+// ====================== PETALSTORM.IO v3 – LEVELS + CRAFTING ======================
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 const W = 1000, H = 700;
 
 let mouseX = W/2, mouseY = H/2;
 canvas.addEventListener('mousemove', e => { const r=canvas.getBoundingClientRect(); mouseX=e.clientX-r.left; mouseY=e.clientY-r.top; });
+
+let keys = {};
+window.addEventListener('keydown', e => {
+    keys[e.key.toLowerCase()] = true;
+    if (e.key === 'c' || e.key === 'C') toggleCraft();
+    if (e.key === 'Escape') closeCraft();
+});
+window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
 const RARITIES = [
     {name:"Common", color:"#aaa", mult:1, chance:40},
@@ -51,7 +76,6 @@ function getRandomRarity() {
     return RARITIES[0];
 }
 
-// ==================== REAL FLORR PETALS (from official wiki) ====================
 const PETAL_DEFS = {
     basic:  {name:"Basic",  col:"#ddd", dmg:1.0, dur:120, rot:1.0, special:"none"},
     rose:   {name:"Rose",   col:"#f68", dmg:0.4, dur:95,  rot:1.0, special:"heal", healRate:1.2},
@@ -68,23 +92,33 @@ let player = {
     health: 300, maxHealth: 300,
     speed: 4.3,
     angle: 0,
-    petals: [],          // {key:"rose", rarityObj, curDur: 180}
+    petals: [],
+    level: 1,
+    xp: 0,
+    xpToNext: 920,
+    maxSlots: 5,
+    bodyDamage: 7,
     size: 26
 };
 
-let enemies = [], loots = [], projectiles = [], particles = [];
-let score = 0, kills = 0, gameOver = false;
-let lastLoot = 0;
-let cameraX = 0, cameraY = 0;
+let enemies = [], loots = [], score = 0, kills = 0, gameOver = false;
+let lastLoot = 0, cameraX = 0, cameraY = 0;
+let craftOpen = false;
 
-// Enemy types with specific drop biases (real Florr style)
 const ENEMY_TYPES = [
-    {id:"ladybug", col:"#f66", size:19, hp:65, speed:1.3, dmg:0.7, drops:["rose","leaf","basic"], bias:[0.45,0.35,0.2]},
-    {id:"bee",     col:"#ff4", size:17, hp:55, speed:2.1, dmg:1.1, drops:["stinger","light","basic"], bias:[0.6,0.25,0.15]},
-    {id:"ant",     col:"#c93", size:18, hp:48, speed:1.6, dmg:0.8, drops:["basic","light","rose"], bias:[0.5,0.3,0.2]},
-    {id:"beetle",  col:"#642", size:26, hp:140,speed:0.9, dmg:1.4, drops:["cactus","heavy","shell"], bias:[0.4,0.35,0.25]},
-    {id:"hornet",  col:"#f82", size:22, hp:95, speed:1.8, dmg:1.2, drops:["stinger","light"], bias:[0.7,0.3]}
+    {id:"ladybug", col:"#f66", size:19, hp:65, speed:1.3, dmg:0.7, drops:["rose","leaf","basic"]},
+    {id:"bee",     col:"#ff4", size:17, hp:55, speed:2.1, dmg:1.1, drops:["stinger","light","basic"]},
+    {id:"ant",     col:"#c93", size:18, hp:48, speed:1.6, dmg:0.8, drops:["basic","light","rose"]},
+    {id:"beetle",  col:"#642", size:26, hp:140,speed:0.9, dmg:1.4, drops:["cactus","heavy","shell"]},
+    {id:"hornet",  col:"#f82", size:22, hp:95, speed:1.8, dmg:1.2, drops:["stinger","light"]}
 ];
+
+function updatePlayerStats() {
+    player.maxSlots = Math.min(15, 5 + Math.floor((player.level-1)/10));
+    player.maxHealth = 300 + (player.level-1) * 26;
+    player.bodyDamage = 5 + player.level * 1.65;
+    if (player.health > player.maxHealth) player.health = player.maxHealth;
+}
 
 function spawnEnemy() {
     const type = ENEMY_TYPES[Math.floor(Math.random()*ENEMY_TYPES.length)];
@@ -109,16 +143,11 @@ function spawnLoot(x, y, forcedType = null) {
 function collectLoot(i) {
     const l = loots[i];
     const def = PETAL_DEFS[l.typeKey];
-    const newPetal = {
-        key: l.typeKey,
-        rarity: l.rarity,
-        curDur: def.dur * l.rarity.mult * 1.1
-    };
+    const newPetal = {key: l.typeKey, rarity: l.rarity, curDur: def.dur * l.rarity.mult * 1.1};
 
-    if (player.petals.length < 8) {
+    if (player.petals.length < player.maxSlots) {
         player.petals.push(newPetal);
     } else {
-        // replace weakest
         let worst = 0;
         for (let j=1; j<player.petals.length; j++) {
             if (player.petals[j].rarity.mult < player.petals[worst].rarity.mult) worst = j;
@@ -127,26 +156,110 @@ function collectLoot(i) {
     }
     loots.splice(i,1);
     score += Math.floor(l.rarity.mult * 15);
+    player.xp += Math.floor(38 * l.rarity.mult);
     recalcBonuses();
 }
 
 function recalcBonuses() {
-    let extraHP = 0;
+    let extra = 0;
     for (let p of player.petals) {
-        if (PETAL_DEFS[p.key].special === "maxhp") extraHP += PETAL_DEFS[p.key].bonus * p.rarity.mult;
+        if (PETAL_DEFS[p.key].special === "maxhp") extra += PETAL_DEFS[p.key].bonus * p.rarity.mult;
     }
-    player.maxHealth = 300 + extraHP;
-    if (player.health > player.maxHealth) player.health = player.maxHealth;
+    player.maxHealth = 300 + (player.level-1)*26 + extra;
 }
 
-// ==================== MAIN LOOP ====================
+function performCraft() {
+    let groups = {};
+    player.petals.forEach(p => {
+        const id = p.key + "|" + p.rarity.name;
+        if (!groups[id]) groups[id] = [];
+        groups[id].push(p);
+    });
+
+    for (let id in groups) {
+        if (groups[id].length >= 3) {
+            const sample = groups[id][0];
+            const key = sample.key;
+            const rarityIdx = RARITIES.findIndex(r => r.name === sample.rarity.name);
+            const nextRarity = RARITIES[Math.min(rarityIdx + 1, RARITIES.length-1)];
+
+            // remove 3
+            let removed = 0;
+            for (let i = player.petals.length-1; i>=0 && removed<3; i--) {
+                if (player.petals[i].key === key && player.petals[i].rarity.name === sample.rarity.name) {
+                    player.petals.splice(i,1);
+                    removed++;
+                }
+            }
+
+            // add upgraded
+            const def = PETAL_DEFS[key];
+            player.petals.push({
+                key: key,
+                rarity: nextRarity,
+                curDur: def.dur * nextRarity.mult * 1.25
+            });
+
+            score += 420;
+            document.getElementById('craftInfo').innerHTML = `<span style="color:#0f0">✅ CRAFT SUCCESS! ${PETAL_DEFS[key].name} → ${nextRarity.name}</span>`;
+            recalcBonuses();
+            setTimeout(updateCraftInfo, 1400);
+            return;
+        }
+    }
+    document.getElementById('craftInfo').innerHTML = `<span style="color:#f44">❌ Need 3 identical petals (same type + same rarity)</span>`;
+}
+
+function updateCraftInfo() {
+    let html = "<strong>Groups (type + rarity):</strong><br>";
+    let groups = {};
+    player.petals.forEach(p => {
+        const id = PETAL_DEFS[p.key].name + " " + p.rarity.name;
+        if (!groups[id]) groups[id] = 0;
+        groups[id]++;
+    });
+    for (let g in groups) {
+        html += `${g} × ${groups[g]}<br>`;
+    }
+    document.getElementById('craftInfo').innerHTML = html || "No petals yet...";
+}
+
+function toggleCraft() {
+    craftOpen = !craftOpen;
+    const m = document.getElementById('craftMenu');
+    m.style.display = craftOpen ? 'block' : 'none';
+    if (craftOpen) updateCraftInfo();
+}
+function closeCraft() {
+    craftOpen = false;
+    document.getElementById('craftMenu').style.display = 'none';
+}
+
+function resetGame(fullReset = true) {
+    player.x = 2000; player.y = 1500;
+    player.health = 300;
+    player.level = 1;
+    player.xp = 0;
+    player.xpToNext = 920;
+    player.petals = [];
+    for (let i=0; i<5; i++) player.petals.push({key:"basic", rarity:RARITIES[0], curDur:120});
+    updatePlayerStats();
+    recalcBonuses();
+    score = 0; kills = 0;
+    enemies = []; loots = [];
+    gameOver = false;
+    lastLoot = 0;
+    for (let i=0;i<20;i++) spawnEnemy();
+    for (let i=0;i<15;i++) spawnLoot(player.x + (Math.random()-0.5)*500, player.y + (Math.random()-0.5)*500);
+}
+
 function update() {
     if (gameOver) return;
 
-    // Player movement
+    // movement
     const dx = mouseX - W/2, dy = mouseY - H/2;
     const d = Math.hypot(dx,dy) || 1;
-    if (d > 15) {
+    if (d > 12) {
         player.x += (dx/d) * player.speed;
         player.y += (dy/d) * player.speed;
     }
@@ -155,16 +268,25 @@ function update() {
     cameraX = player.x - W/2;
     cameraY = player.y - H/2;
 
-    // Petal bonuses & healing
-    let healThisFrame = 0;
+    // passive healing
+    let heal = 0;
     for (let p of player.petals) {
         const def = PETAL_DEFS[p.key];
-        if (def.special === "heal") healThisFrame += def.healRate * p.rarity.mult * 0.016;
+        if (def.special === "heal") heal += def.healRate * p.rarity.mult * 0.016;
     }
-    player.health += healThisFrame;
-    if (player.health > player.maxHealth) player.health = player.maxHealth;
+    player.health += heal;
 
-    // Enemies
+    // level up check
+    while (player.xp >= player.xpToNext) {
+        player.xp -= player.xpToNext;
+        player.level++;
+        player.xpToNext = Math.floor(player.xpToNext * 1.32 + 220);
+        updatePlayerStats();
+        player.health += 95; // level-up heal
+        if (player.health > player.maxHealth) player.health = player.maxHealth;
+    }
+
+    // enemies
     for (let i = enemies.length-1; i >= 0; i--) {
         const e = enemies[i];
         const edx = player.x - e.x, edy = player.y - e.y;
@@ -172,10 +294,13 @@ function update() {
         e.x += (edx/ed) * e.speed;
         e.y += (edy/ed) * e.speed;
 
-        // Player touch damage
-        if (ed < player.size + e.size) player.health -= e.dmg * 0.6;
+        // PLAYER BODY DAMAGE (scales with level!)
+        if (ed < player.size + e.size + 6) {
+            e.health -= player.bodyDamage * 0.48;
+            player.health -= e.dmg * 0.52; // enemy still hurts player
+        }
 
-        // Petal damage + special effects
+        // petal damage
         let totalDmg = 0;
         for (let j = 0; j < player.petals.length; j++) {
             const p = player.petals[j];
@@ -184,59 +309,44 @@ function update() {
             const px = player.x + Math.cos(ang)*48;
             const py = player.y + Math.sin(ang)*48;
 
-            if (Math.hypot(px-e.x, py-e.y) < 24 + e.size) {
-                const dmg = def.dmg * p.rarity.mult * 0.42;
-                totalDmg += dmg;
-                p.curDur -= 0.8; // enemies damage petals
+            if (Math.hypot(px-e.x, py-e.y) < 25) {
+                totalDmg += def.dmg * p.rarity.mult * 0.42;
+                p.curDur -= 0.85;
 
-                if (def.special === "poison") {
-                    e.poisonTime = 90;
-                    e.poisonDmg = def.poison * p.rarity.mult * 0.03;
-                }
-                if (def.special === "knock") {
-                    e.x -= (edx/ed) * 9 * p.rarity.mult;
-                    e.y -= (edy/ed) * 9 * p.rarity.mult;
-                }
+                if (def.special === "poison") { e.poisonTime = 100; e.poisonDmg = def.poison * p.rarity.mult * 0.028; }
+                if (def.special === "knock") { e.x -= (edx/ed)*12*p.rarity.mult; e.y -= (edy/ed)*12*p.rarity.mult; }
             }
         }
         e.health -= totalDmg;
 
-        // Poison tick
-        if (e.poisonTime > 0) {
-            e.health -= e.poisonDmg;
-            e.poisonTime--;
-        }
+        if (e.poisonTime > 0) { e.health -= e.poisonDmg; e.poisonTime--; }
 
         if (e.health <= 0) {
-            // HIGH LOOT + type-specific drops
-            const dropCount = 5 + Math.floor(Math.random()*8);
+            const dropCount = 6 + Math.floor(Math.random()*9);
             for (let d=0; d<dropCount; d++) {
-                const idx = Math.random() < 0.75 ? 
-                    Math.floor(Math.random()*e.drops.length) : 
-                    Math.floor(Math.random()*Object.keys(PETAL_DEFS).length);
-                const forced = e.drops ? e.drops[idx] : null;
-                spawnLoot(e.x + (Math.random()-0.5)*40, e.y + (Math.random()-0.5)*40, forced);
+                const forced = Math.random()<0.75 ? e.drops[Math.floor(Math.random()*e.drops.length)] : null;
+                spawnLoot(e.x+(Math.random()-0.5)*45, e.y+(Math.random()-0.5)*45, forced);
             }
             enemies.splice(i,1);
             kills++;
-            score += 180;
-            if (enemies.length < 28) spawnEnemy();
+            score += 190;
+            player.xp += 310 + player.level*22;
+            if (enemies.length < 26) spawnEnemy();
         }
     }
 
-    // Loot magnet + collect
+    // loot
     for (let i=loots.length-1; i>=0; i--) {
         const l = loots[i];
-        if (Math.hypot(l.x-player.x, l.y-player.y) < 55) collectLoot(i);
+        if (Math.hypot(l.x-player.x, l.y-player.y) < 58) collectLoot(i);
     }
 
-    // Insane free loot (your request)
-    if (Date.now() - lastLoot > 340) {
-        for (let i=0; i<4; i++) spawnLoot(player.x + (Math.random()-0.5)*300, player.y + (Math.random()-0.5)*300);
+    if (Date.now() - lastLoot > 320) {
+        for (let i=0; i<4; i++) spawnLoot(player.x+(Math.random()-0.5)*340, player.y+(Math.random()-0.5)*340);
         lastLoot = Date.now();
     }
 
-    // Cleanup dead petals
+    // cleanup dead petals
     for (let i=player.petals.length-1; i>=0; i--) {
         if (player.petals[i].curDur <= 0) player.petals.splice(i,1);
     }
@@ -249,12 +359,11 @@ function draw() {
     ctx.fillStyle = '#3a8c3a';
     ctx.fillRect(0,0,W,H);
 
-    // Grid
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-    for (let x = -cameraX%70; x < W; x+=70) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
-    for (let y = -cameraY%70; y < H; y+=70) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+    for (let x = -cameraX%70; x<W; x+=70) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+    for (let y = -cameraY%70; y<H; y+=70) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
 
-    // Loots
+    // loots
     for (let l of loots) {
         const sx = l.x - cameraX, sy = l.y - cameraY;
         ctx.shadowBlur = 25; ctx.shadowColor = PETAL_DEFS[l.typeKey].col;
@@ -265,79 +374,78 @@ function draw() {
         ctx.fillText(PETAL_DEFS[l.typeKey].name[0], sx, sy+4);
     }
 
-    // Enemies
+    // enemies
     for (let e of enemies) {
         const sx = e.x - cameraX, sy = e.y - cameraY;
         ctx.fillStyle = e.col;
         ctx.beginPath(); ctx.arc(sx,sy,e.size,0,Math.PI*2); ctx.fill();
-        if (e.poisonTime > 0) {
-            ctx.fillStyle = "rgba(0,255,80,0.4)";
-            ctx.beginPath(); ctx.arc(sx,sy,e.size+4,0,Math.PI*2); ctx.fill();
+        if (e.poisonTime>0) {
+            ctx.fillStyle = "rgba(80,255,120,0.45)";
+            ctx.beginPath(); ctx.arc(sx,sy,e.size+6,0,Math.PI*2); ctx.fill();
         }
     }
 
-    // Player petals
+    // petals
     for (let i=0; i<player.petals.length; i++) {
         const p = player.petals[i];
         const def = PETAL_DEFS[p.key];
-        const ang = player.angle + (i/player.petals.length)*Math.PI*2 + (def.rot ? 0 : 0.3);
+        const ang = player.angle + (i/player.petals.length)*Math.PI*2;
         const px = player.x + Math.cos(ang)*49 - cameraX;
         const py = player.y + Math.sin(ang)*49 - cameraY;
 
         ctx.save();
         ctx.translate(px,py);
         ctx.rotate(ang);
-
         ctx.fillStyle = def.col;
-        ctx.shadowBlur = 15; ctx.shadowColor = def.col;
-        ctx.fillRect(-18,-9,36,18); // different shapes possible later
+        ctx.shadowBlur = 16; ctx.shadowColor = def.col;
+        ctx.fillRect(-18,-9,36,18);
         ctx.shadowBlur = 0;
-
-        ctx.fillStyle = "#fff8"; ctx.fillRect(-13,-4,10,8);
+        ctx.fillStyle = "#fff9"; ctx.fillRect(-12,-4,9,7);
         ctx.restore();
 
-        // durability bar
-        if (p.curDur < def.dur * p.rarity.mult * 0.9) {
+        if (p.curDur < def.dur * p.rarity.mult * 0.85) {
             const ratio = p.curDur / (def.dur * p.rarity.mult * 1.1);
-            ctx.fillStyle = "#00000088";
-            ctx.fillRect(px-11, py-22, 22, 4);
-            ctx.fillStyle = ratio > 0.4 ? "#4f4" : "#f44";
-            ctx.fillRect(px-11, py-22, 22*ratio, 4);
+            ctx.fillStyle = "#0009"; ctx.fillRect(px-12,py-23,24,5);
+            ctx.fillStyle = ratio>0.35?"#4f4":"#f44";
+            ctx.fillRect(px-12,py-23,24*ratio,5);
         }
     }
 
-    // Player core
+    // player
     const cx = player.x - cameraX, cy = player.y - cameraY;
     ctx.fillStyle = "#ffeb3b";
     ctx.beginPath(); ctx.arc(cx,cy,player.size,0,Math.PI*2); ctx.fill();
-    ctx.strokeStyle = "#222"; ctx.lineWidth = 6; ctx.stroke();
+    ctx.strokeStyle = "#222"; ctx.lineWidth = 7; ctx.stroke();
     ctx.fillStyle = "#222"; ctx.beginPath(); ctx.arc(cx,cy,11,0,Math.PI*2); ctx.fill();
 
-    // Health bar
-    ctx.fillStyle = "#00000099"; ctx.fillRect(cx-45, cy-48, 90, 9);
+    // health bar
+    ctx.fillStyle = "#000a"; ctx.fillRect(cx-48, cy-52, 96, 10);
     ctx.fillStyle = player.health > player.maxHealth*0.3 ? "#4f4" : "#f44";
-    ctx.fillRect(cx-45, cy-48, 90 * (player.health/player.maxHealth), 9);
+    ctx.fillRect(cx-48, cy-52, 96*(player.health/player.maxHealth), 10);
 
     // UI
     document.getElementById('score').textContent = Math.floor(score);
     document.getElementById('kills').textContent = kills;
+    document.getElementById('level').textContent = player.level;
+    document.getElementById('xp').textContent = Math.floor(player.xp);
+    document.getElementById('nextxp').textContent = Math.floor(player.xpToNext);
     document.getElementById('health').textContent = Math.floor(player.health);
     document.getElementById('maxhealth').textContent = Math.floor(player.maxHealth);
+    document.getElementById('slots').textContent = player.petals.length + "/" + player.maxSlots;
 
-    // Petals list UI
-    let listHTML = "Petals:<br>";
-    for (let p of player.petals) {
-        listHTML += `<span style="color:${p.rarity.color}">${PETAL_DEFS[p.key].name} ${p.rarity.name[0]}</span><br>`;
-    }
-    document.getElementById('petalsList').innerHTML = listHTML;
+    let list = `Petals (${player.petals.length}/${player.maxSlots})<br>`;
+    player.petals.forEach(p => {
+        list += `<span style="color:${p.rarity.color}">${PETAL_DEFS[p.key].name} ${p.rarity.name[0]}</span><br>`;
+    });
+    document.getElementById('petalsList').innerHTML = list;
 
     if (gameOver) {
-        ctx.fillStyle = "rgba(0,0,0,0.8)"; ctx.fillRect(0,0,W,H);
+        ctx.fillStyle = "rgba(0,0,0,0.85)"; ctx.fillRect(0,0,W,H);
         ctx.fillStyle = "#f44"; ctx.font = "bold 72px Arial"; ctx.textAlign = "center";
         ctx.fillText("GAME OVER", W/2, H/2-30);
         ctx.fillStyle = "#fff"; ctx.font = "28px Arial";
-        ctx.fillText(`Score ${Math.floor(score)} • Kills ${kills}`, W/2, H/2+40);
-        ctx.fillText("Click to restart", W/2, H/2+90);
+        ctx.fillText(`Level ${player.level} • Score ${Math.floor(score)}`, W/2, H/2+35);
+        ctx.fillText("Click anywhere to restart", W/2, H/2+80);
     }
 }
 
@@ -347,17 +455,12 @@ function loop() {
     requestAnimationFrame(loop);
 }
 
-canvas.addEventListener('click', () => { if (gameOver) { 
-    player.petals = []; player.health = 300; player.maxHealth = 300;
-    enemies = []; loots = []; score=0; kills=0; gameOver=false;
-    for (let i=0;i<5;i++) player.petals.push({key:"basic", rarity:RARITIES[0], curDur:120});
-    for (let i=0;i<15;i++) spawnEnemy();
-}});
+canvas.addEventListener('click', () => {
+    if (gameOver) resetGame();
+});
 
 // START
-for (let i=0;i<5;i++) player.petals.push({key:"basic", rarity:RARITIES[0], curDur:120});
-for (let i=0;i<20;i++) spawnEnemy();
-for (let i=0;i<12;i++) spawnLoot(player.x + (Math.random()-0.5)*400, player.y + (Math.random()-0.5)*400);
+resetGame();
 loop();
 </script>
 </body>
