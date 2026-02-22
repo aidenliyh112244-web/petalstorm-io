@@ -2,17 +2,19 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>PetalStorm.io v9 – Walls Everywhere + Inventory + Dynamic Spawn + True Orbit Extend</title>
+    <title>PetalStorm.io v10 – Inventory + Slot Bar + Q + Fixed Extend</title>
     <style>
         body { margin:0; background:#111; font-family:Arial; color:#fff; overflow:hidden; }
         canvas { display:block; margin:20px auto; border:4px solid #333; box-shadow:0 0 40px #0f0; }
         #ui { position:absolute; top:10px; left:10px; background:rgba(0,0,0,0.75); padding:12px 16px; border-radius:10px; font-size:15px; line-height:1.35; }
         #petalsList { position:absolute; top:10px; right:220px; background:rgba(0,0,0,0.75); padding:10px; border-radius:8px; max-width:260px; font-size:13px; }
-        #craftMenu, #inventoryMenu { display:none; position:absolute; bottom:20px; left:20px; background:rgba(15,25,35,0.97); padding:18px; border-radius:16px; border:6px solid #0ff; width:380px; text-align:left; box-shadow:0 0 60px #0ff; }
+        #craftMenu, #inventoryMenu { display:none; position:absolute; bottom:120px; left:20px; background:rgba(15,25,35,0.97); padding:18px; border-radius:16px; border:6px solid #0ff; width:380px; text-align:left; box-shadow:0 0 60px #0ff; max-height:420px; overflow:auto; }
         #pediaMenu { display:none; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(15,25,35,0.97); padding:25px; border-radius:18px; border:6px solid #0ff; width:460px; text-align:center; box-shadow:0 0 60px #0ff; }
         button { background:#0f0; color:#000; font-weight:bold; padding:10px 20px; margin:6px 4px; border:none; border-radius:8px; cursor:pointer; font-size:15px; }
         button:hover { background:#4f4; }
-        #extendBtn { position:absolute; bottom:140px; right:20px; background:#0ff; color:#000; padding:18px 40px; font-size:22px; border-radius:50px; box-shadow:0 0 30px #0ff; }
+        #extendBtn { position:absolute; bottom:200px; right:20px; background:#0ff; color:#000; padding:18px 40px; font-size:22px; border-radius:50px; box-shadow:0 0 30px #0ff; }
+        #slotBar { position:absolute; bottom:20px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.85); padding:10px; border-radius:16px; display:flex; gap:8px; flex-wrap:wrap; max-width:720px; }
+        .slot { width:48px; height:48px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:22px; cursor:pointer; box-shadow:0 0 12px #000; border:3px solid #222; }
     </style>
 </head>
 <body>
@@ -26,15 +28,15 @@
     <button id="extendBtn">EXTEND ORBIT (A)</button>
 
     <div id="craftMenu">
-        <h2 style="color:#0ff;margin:0 0 12px 0">🌟 CRAFTING LAB</h2>
+        <h2 style="color:#0ff;margin:0 0 12px 0">🌟 CRAFTING LAB (Equipped + Inventory)</h2>
         <div id="craftInfo" style="max-height:280px;overflow:auto;"></div>
         <button onclick="closeCraft()" style="background:#555;width:100%;margin-top:12px">Close (ESC)</button>
     </div>
 
     <div id="inventoryMenu">
-        <h2 style="color:#0ff;margin:0 0 12px 0">📦 INVENTORY (40 slots)</h2>
-        <div id="inventoryInfo" style="max-height:280px;overflow:auto;"></div>
-        <button onclick="closeInventory()" style="background:#555;width:100%;margin-top:12px">Close (I)</button>
+        <h2 style="color:#0ff;margin:0 0 12px 0">📦 INVENTORY (40 slots) – Click to equip</h2>
+        <div id="inventoryInfo" style="max-height:320px;overflow:auto;"></div>
+        <button onclick="closeInventory()" style="background:#555;width:100%;margin-top:12px">Close (Q)</button>
     </div>
 
     <div id="pediaMenu">
@@ -43,12 +45,14 @@
         <button onclick="closePedia()" style="background:#555">Close (H)</button>
     </div>
 
+    <div id="slotBar"></div>
+
     <div id="instructions" style="position:absolute;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);padding:8px 20px;border-radius:8px;font-size:14px;">
-        MOUSE = move • C = Craft • I = Inventory • A / EXTEND = Petals fly farther out • H = Pedia
+        MOUSE = move • C = Craft • Q = Inventory • A = Extend Orbit • H = Pedia
     </div>
 
 <script>
-// ====================== PETALSTORM.IO v9 – COMPLETE ======================
+// ====================== PETALSTORM.IO v10 – FULL REQUESTS ======================
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 const W = 1000, H = 700;
@@ -61,7 +65,7 @@ window.addEventListener('keydown', e => {
     keys[e.key.toLowerCase()] = true;
     if (e.key.toLowerCase() === 'a') toggleExtend();
     if (e.key === 'c' || e.key === 'C') toggleCraft();
-    if (e.key === 'i' || e.key === 'I') toggleInventory();
+    if (e.key.toLowerCase() === 'q') toggleInventory();
     if (e.key === 'h' || e.key === 'H') togglePedia();
     if (e.key === 'Escape') { closeCraft(); closeInventory(); closePedia(); }
 });
@@ -69,7 +73,7 @@ window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
 document.getElementById('extendBtn').addEventListener('click', toggleExtend);
 
-const RARITIES = [ /* same as v8 */ 
+const RARITIES = [
     {name:"Common", color:"#aaa", mult:1, chance:40, index:0},{name:"Uncommon", color:"#4f4", mult:3, chance:24, index:1},
     {name:"Rare", color:"#48f", mult:9, chance:15, index:2},{name:"Epic", color:"#a4f", mult:27, chance:9, index:3},
     {name:"Legendary", color:"#fa2", mult:81, chance:5.5, index:4},{name:"Mythic", color:"#f4c", mult:243, chance:3.5, index:5},
@@ -96,14 +100,14 @@ function getRandomMobRarity(zoneIdx) {
 }
 
 const PETAL_DEFS = {
-    basic:  {name:"Basic",  col:"#ddd", dmg:1.0, dur:140, rot:1.0, special:"none"},
-    rose:   {name:"Rose",   col:"#f68", dmg:0.35, dur:110, rot:1.0, special:"heal", healRate:1.8},
-    stinger:{name:"Stinger",col:"#fc4", dmg:6.2, dur:42, rot:0.8, special:"poison", poison:2.4},
-    cactus: {name:"Cactus", col:"#4b4", dmg:1.1, dur:280, rot:0.9, special:"maxhp", bonus:65},
-    leaf:   {name:"Leaf",   col:"#8f4", dmg:0.6, dur:160, rot:1.2, special:"heal", healRate:3.1},
-    heavy:  {name:"Heavy",  col:"#777", dmg:5.5, dur:310, rot:0.5, special:"knock"},
-    shell:  {name:"Shell",  col:"#9cf", dmg:0.95, dur:480, rot:1.0, special:"shield", shield:0.22},
-    light:  {name:"Light",  col:"#ff8", dmg:0.8, dur:68, rot:3.4, special:"none"}
+    basic:  {name:"Basic",  col:"#ddd", dmg:1.0, dur:140, rot:1.0, special:"none", emoji:"⚪"},
+    rose:   {name:"Rose",   col:"#f68", dmg:0.35, dur:110, rot:1.0, special:"heal", healRate:1.8, emoji:"🌹"},
+    stinger:{name:"Stinger",col:"#fc4", dmg:6.2, dur:42, rot:0.8, special:"poison", poison:2.4, emoji:"🐝"},
+    cactus: {name:"Cactus", col:"#4b4", dmg:1.1, dur:280, rot:0.9, special:"maxhp", bonus:65, emoji:"🌵"},
+    leaf:   {name:"Leaf",   col:"#8f4", dmg:0.6, dur:160, rot:1.2, special:"heal", healRate:3.1, emoji:"🍃"},
+    heavy:  {name:"Heavy",  col:"#777", dmg:5.5, dur:310, rot:0.5, special:"knock", emoji:"🪨"},
+    shell:  {name:"Shell",  col:"#9cf", dmg:0.95, dur:480, rot:1.0, special:"shield", shield:0.22, emoji:"🐚"},
+    light:  {name:"Light",  col:"#ff8", dmg:0.8, dur:68, rot:3.4, special:"none", emoji:"⭐"}
 };
 
 let player = {x:2000,y:1500,health:300,maxHealth:300,speed:4.3,angle:0,petals:[],inventory:[],level:1,xp:0,xpToNext:920,maxSlots:5,bodyDamage:7,size:26};
@@ -116,7 +120,7 @@ const EXTEND_DURATION = 8000;
 const EXTEND_COOLDOWN = 15000;
 let lastExtend = 0;
 
-const ENEMY_TYPES = [
+const ENEMY_TYPES = [ /* same 9 mobs */ 
     {id:"ladybug", col:"#f66", baseSize:19, baseHP:72, baseSpeed:1.1, baseDmg:0.8, drops:["rose","leaf","basic"]},
     {id:"bee",     col:"#ff4", baseSize:17, baseHP:58, baseSpeed:1.5, baseDmg:1.1, drops:["stinger","light","basic"]},
     {id:"ant",     col:"#c93", baseSize:18, baseHP:52, baseSpeed:1.3, baseDmg:0.9, drops:["basic","light","rose"]},
@@ -130,18 +134,18 @@ const ENEMY_TYPES = [
 
 function generateWalls() {
     walls = [];
-    for (let i = 0; i < 135; i++) {
+    for (let i = 0; i < 160; i++) {
         walls.push({
-            x: Math.random() * 14000 - 5000,
-            y: Math.random() * 14000 - 5000,
-            w: 50 + Math.random() * 280,
-            h: 50 + Math.random() * 280
+            x: Math.random() * 16000 - 6000,
+            y: Math.random() * 16000 - 6000,
+            w: 60 + Math.random() * 320,
+            h: 60 + Math.random() * 320
         });
     }
 }
 
 function loadProgress() {
-    const s = localStorage.getItem('petalStormSaveV9');
+    const s = localStorage.getItem('petalStormSaveV10');
     if (s) {
         const d = JSON.parse(s);
         player.level = d.level||1; player.xp = d.xp||0; player.xpToNext = d.xpToNext||920;
@@ -149,23 +153,21 @@ function loadProgress() {
     }
 }
 function saveProgress() {
-    localStorage.setItem('petalStormSaveV9', JSON.stringify({
-        level:player.level, xp:player.xp, xpToNext:player.xpToNext, petals:player.petals, inventory:player.inventory
-    }));
+    localStorage.setItem('petalStormSaveV10', JSON.stringify({level:player.level, xp:player.xp, xpToNext:player.xpToNext, petals:player.petals, inventory:player.inventory}));
 }
 
-function updatePlayerStats() { /* same as before */ 
+function updatePlayerStats() {
     player.maxSlots = Math.min(15, 5 + Math.floor((player.level-1)/10));
     player.maxHealth = 300 + (player.level-1)*28;
     player.bodyDamage = 4 + player.level*1.8;
 }
 
-function getZoneInfo() { /* same */ 
+function getZoneInfo() {
     const dist = Math.hypot(player.x-2000, player.y-1500);
     return Math.min(4, Math.max(0, Math.floor(dist / 1350)));
 }
 
-function spawnEnemy() { /* same as v8 */ 
+function spawnEnemy() {
     const type = ENEMY_TYPES[Math.floor(Math.random()*ENEMY_TYPES.length)];
     const zoneIdx = getZoneInfo();
     const mobR = getRandomMobRarity(zoneIdx);
@@ -184,7 +186,7 @@ function spawnEnemy() { /* same as v8 */
     });
 }
 
-function spawnLoot(x, y, forcedType = null) { /* same */ 
+function spawnLoot(x, y, forcedType = null) {
     const typeKey = forcedType || Object.keys(PETAL_DEFS)[Math.floor(Math.random()*Object.keys(PETAL_DEFS).length)];
     loots.push({x, y, typeKey, rarity: getRandomRarity()});
 }
@@ -199,15 +201,16 @@ function collectLoot(i) {
     score += Math.floor(l.rarity.mult * 22);
     player.xp += Math.floor(55 * l.rarity.mult);
     recalcBonuses();
+    updateSlotBar();
 }
 
-function recalcBonuses() { /* same */ 
+function recalcBonuses() {
     let extra = 0;
     for (let p of player.petals) if (PETAL_DEFS[p.key].special === "maxhp") extra += PETAL_DEFS[p.key].bonus * p.rarity.mult * 4;
     player.maxHealth = 300 + (player.level-1)*28 + extra;
 }
 
-// ====================== DRAW PETAL (with dynamic radius) ======================
+// ====================== DRAW PETAL ======================
 function drawPetal(px, py, ang, key, rarity, scale = 1) {
     const def = PETAL_DEFS[key];
     ctx.save();
@@ -217,7 +220,6 @@ function drawPetal(px, py, ang, key, rarity, scale = 1) {
     ctx.shadowBlur = 20 * scale;
     ctx.shadowColor = rarity.color;
     const s = 22 * scale;
-
     if (key === "rose") { for(let i=0;i<5;i++){ctx.rotate(Math.PI*2/5); ctx.beginPath(); ctx.ellipse(0,-s*0.6, s*0.4, s*0.9,0,0,Math.PI*2); ctx.fill();} ctx.fillStyle="#fff"; ctx.beginPath();ctx.arc(0,0,s*0.35,0,Math.PI*2);ctx.fill(); }
     else if (key === "stinger") { ctx.beginPath(); ctx.moveTo(0,-s); ctx.lineTo(-s*0.45, s*0.7); ctx.lineTo(s*0.45, s*0.7); ctx.closePath(); ctx.fill(); ctx.fillStyle="#000"; ctx.beginPath();ctx.arc(0,-s*0.55, s*0.22,0,Math.PI*2);ctx.fill(); }
     else if (key === "cactus") { ctx.fillRect(-s*0.45, -s, s*0.9, s*2); ctx.fillStyle="#000"; ctx.fillRect(-s*0.65,-s*0.4,s*0.25,s*0.22); ctx.fillRect(s*0.4,-s*0.4,s*0.25,s*0.22); ctx.fillRect(-s*0.65,s*0.3,s*0.25,s*0.22); ctx.fillRect(s*0.4,s*0.3,s*0.25,s*0.22); }
@@ -226,7 +228,6 @@ function drawPetal(px, py, ang, key, rarity, scale = 1) {
     else if (key === "shell") { ctx.beginPath(); ctx.arc(0,0,s*0.95,Math.PI*0.5,Math.PI*2.5); ctx.fill(); ctx.fillStyle="#000"; ctx.fillRect(-s*0.95,-s*0.2,s*0.55,s*0.4); }
     else if (key === "light") { ctx.rotate(Date.now()/90); ctx.fillRect(-s*0.2,-s,s*0.4,s*2); ctx.fillRect(-s,-s*0.2,s*2,s*0.4); }
     else { ctx.fillRect(-s*0.65,-s*0.65,s*1.3,s*1.3); }
-
     ctx.shadowBlur = 0;
     ctx.restore();
 }
@@ -234,36 +235,54 @@ function drawPetal(px, py, ang, key, rarity, scale = 1) {
 function toggleExtend() {
     const now = Date.now();
     if (now - lastExtend < EXTEND_COOLDOWN) return;
-    petalRadius = 85;
+    petalRadius = 92; // clearly farther out
     extendEndTime = now + EXTEND_DURATION;
     lastExtend = now;
 }
 
-// ====================== INVENTORY ======================
-function updateInventoryUI() {
-    let html = `<b>Equipped (${player.petals.length}/${player.maxSlots})</b><br>`;
-    player.petals.forEach((p,i) => {
-        html += `<span style="color:${p.rarity.color}">${PETAL_DEFS[p.key].name} ${p.rarity.name[0]}</span> <button onclick="unequip(${i});updateInventoryUI()">→ Inv</button><br>`;
-    });
-    html += `<br><b>Inventory (${player.inventory.length}/40)</b><br>`;
-    player.inventory.forEach((p,i) => {
-        html += `<span style="color:${p.rarity.color}">${PETAL_DEFS[p.key].name} ${p.rarity.name[0]}</span> <button onclick="equipFromInv(${i});updateInventoryUI()">→ Equip</button><br>`;
-    });
-    document.getElementById('inventoryInfo').innerHTML = html || "Empty";
+// ====================== SLOT BAR (BOTTOM) ======================
+function updateSlotBar() {
+    let html = '';
+    for (let i = 0; i < player.maxSlots; i++) {
+        if (i < player.petals.length) {
+            const p = player.petals[i];
+            const def = PETAL_DEFS[p.key];
+            html += `<div class="slot" style="background:${p.rarity.color};color:#000" onclick="unequip(${i})" title="${def.name} ${p.rarity.name}">${def.emoji}</div>`;
+        } else {
+            html += `<div class="slot" style="background:#222;border:2px dashed #555" onclick="alert('Equip from inventory (Q)')">❌</div>`;
+        }
+    }
+    document.getElementById('slotBar').innerHTML = html;
 }
 
 function unequip(idx) {
-    if (player.inventory.length >= 40) return;
+    if (player.inventory.length >= 40) return alert("Inventory full!");
     player.inventory.push(player.petals[idx]);
     player.petals.splice(idx,1);
     recalcBonuses();
+    updateSlotBar();
+    if (inventoryOpen) updateInventoryUI();
+}
+
+// ====================== INVENTORY ======================
+function updateInventoryUI() {
+    let html = `<b>Equipped (${player.petals.length}/${player.maxSlots}) – click slot bar below to unequip</b><br>`;
+    player.petals.forEach((p,i) => {
+        html += `<span style="color:${p.rarity.color}">${PETAL_DEFS[p.key].emoji} ${PETAL_DEFS[p.key].name} ${p.rarity.name[0]}</span><br>`;
+    });
+    html += `<br><b>Inventory (${player.inventory.length}/40) – click to equip</b><br>`;
+    player.inventory.forEach((p,i) => {
+        html += `<span style="color:${p.rarity.color};cursor:pointer" onclick="equipFromInv(${i});updateInventoryUI();updateSlotBar()">${PETAL_DEFS[p.key].emoji} ${PETAL_DEFS[p.key].name} ${p.rarity.name[0]}</span><br>`;
+    });
+    document.getElementById('inventoryInfo').innerHTML = html || "Empty – collect more!";
 }
 
 function equipFromInv(idx) {
-    if (player.petals.length >= player.maxSlots) return;
+    if (player.petals.length >= player.maxSlots) return alert("No equipped slots left!");
     player.petals.push(player.inventory[idx]);
     player.inventory.splice(idx,1);
     recalcBonuses();
+    updateSlotBar();
 }
 
 function toggleInventory() {
@@ -273,48 +292,59 @@ function toggleInventory() {
 }
 function closeInventory() { inventoryOpen=false; document.getElementById('inventoryMenu').style.display='none'; }
 
-// ====================== CRAFTING (same) ======================
-function updateCraftUI() { /* same as v8 */ 
-    let html = "";
+// ====================== CRAFTING (from equipped + inventory) ======================
+function updateCraftUI() {
+    let allPetals = [...player.petals, ...player.inventory];
     let groups = {};
-    player.petals.forEach(p => {
+    allPetals.forEach(p => {
         const id = p.key + "|" + p.rarity.name;
         if (!groups[id]) groups[id] = {key:p.key, rarity:p.rarity, count:0};
         groups[id].count++;
     });
+    let html = "";
     for (let g in groups) {
         const gr = groups[g];
         if (gr.count >= 5 && gr.rarity.index < 11) {
-            html += `<div class="group"><b style="color:${gr.rarity.color}">${PETAL_DEFS[gr.key].name} ${gr.rarity.name}</b> ×${gr.count}<br>
-                <button onclick="attemptCraft('${gr.key}',${JSON.stringify(gr.rarity).replace(/"/g,'&quot;')});updateCraftUI()">Craft 1×</button>
+            html += `<div class="group"><b style="color:${gr.rarity.color}">${PETAL_DEFS[gr.key].emoji} ${PETAL_DEFS[gr.key].name} ${gr.rarity.name}</b> ×${gr.count}<br>
+                <button onclick="attemptCraft('${gr.key}',${JSON.stringify(gr.rarity).replace(/"/g,'&quot;')});updateCraftUI()">Craft 1× (5 petals)</button>
                 <button onclick="bulkCraft('${gr.key}',${JSON.stringify(gr.rarity).replace(/"/g,'&quot;')});">FAST ALL</button></div>`;
         }
     }
-    document.getElementById('craftInfo').innerHTML = html || "Need 5+ identical";
+    document.getElementById('craftInfo').innerHTML = html || "Need 5+ identical petals (equipped + inventory)";
 }
-function attemptCraft(key, rarityObj) { /* same */ 
+
+function attemptCraft(key, rarityObj) {
     const rIdx = rarityObj.index;
     const chance = [0.64,0.32,0.16,0.08,0.04,0.02,0.01,0.001][rIdx] || 0.001;
-    let count = player.petals.filter(p => p.key===key && p.rarity.name===rarityObj.name).length;
+    let allPetals = [...player.petals, ...player.inventory];
+    let count = allPetals.filter(p => p.key===key && p.rarity.name===rarityObj.name).length;
     if (count < 5) return;
+
+    // remove 5 from inventory first, then equipped
     let removed = 0;
+    for (let i=player.inventory.length-1; i>=0 && removed<5; i--) {
+        if (player.inventory[i].key===key && player.inventory[i].rarity.name===rarityObj.name) { player.inventory.splice(i,1); removed++; }
+    }
     for (let i=player.petals.length-1; i>=0 && removed<5; i--) {
         if (player.petals[i].key===key && player.petals[i].rarity.name===rarityObj.name) { player.petals.splice(i,1); removed++; }
     }
+
     if (Math.random() < chance) {
         const nextR = RARITIES[Math.min(rIdx+1, RARITIES.length-1)];
         const def = PETAL_DEFS[key];
-        player.petals.push({key:key, rarity:nextR, curDur:def.dur * nextR.mult * 1.3});
+        player.inventory.push({key:key, rarity:nextR, curDur:def.dur * nextR.mult * 1.3}); // craft to inventory
         score += 680;
     } else {
         const keep = 1 + Math.floor(Math.random()*4);
-        for (let i=0; i<keep; i++) player.petals.push({key:key, rarity:rarityObj, curDur:PETAL_DEFS[key].dur * rarityObj.mult * 1.1});
+        for (let i=0; i<keep; i++) player.inventory.push({key:key, rarity:rarityObj, curDur:PETAL_DEFS[key].dur * rarityObj.mult * 1.1});
     }
     recalcBonuses();
+    updateSlotBar();
 }
+
 function bulkCraft(key, rarityObj) {
     let crafted = 0;
-    while (player.petals.filter(p => p.key===key && p.rarity.name===rarityObj.name).length >= 5 && crafted < 15) {
+    while (player.inventory.length + player.petals.length >= 5 && crafted < 12) { // rough check
         attemptCraft(key, rarityObj);
         crafted++;
     }
@@ -336,21 +366,16 @@ function moveWithWalls(obj, dx, dy, size) {
     obj.x = nx; obj.y = ny;
 }
 
-function drawMiniMap() {
+function drawMiniMap() { /* same as v9 */ 
     const mx = W - 210, my = 20, ms = 190;
     const sc = ms / 16000;
     ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(mx, my, ms, ms);
     ctx.strokeStyle = '#555'; ctx.strokeRect(mx, my, ms, ms);
-
     const px = mx + (player.x + 8000) * sc;
     const py = my + (player.y + 8000) * sc;
     ctx.fillStyle = '#ffeb3b'; ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI*2); ctx.fill();
-
     ctx.fillStyle = '#777';
-    for (let w of walls) {
-        ctx.fillRect(mx + (w.x + 8000)*sc, my + (w.y + 8000)*sc, w.w*sc, w.h*sc);
-    }
-
+    for (let w of walls) ctx.fillRect(mx + (w.x + 8000)*sc, my + (w.y + 8000)*sc, w.w*sc, w.h*sc);
     for (let e of enemies) {
         const ex = mx + (e.x + 8000) * sc;
         const ey = my + (e.y + 8000) * sc;
@@ -396,10 +421,9 @@ function update() {
     player.health += heal;
     while (player.xp >= player.xpToNext) { player.xp -= player.xpToNext; player.level++; player.xpToNext = Math.floor(player.xpToNext * 1.38 + 300); updatePlayerStats(); player.health += 140; }
 
-    // DYNAMIC SPAWN
-    let nearby = 0;
-    for (let e of enemies) if (Math.hypot(e.x-player.x, e.y-player.y) < 900) nearby++;
-    if (nearby < 18) for (let i=0; i<6; i++) spawnEnemy();
+    // DYNAMIC SPAWN – stronger
+    let nearby = enemies.filter(e => Math.hypot(e.x-player.x, e.y-player.y) < 1100).length;
+    if (nearby < 22) for (let i=0; i<8; i++) spawnEnemy();
 
     // ENEMIES
     for (let i=enemies.length-1; i>=0; i--) {
@@ -521,7 +545,7 @@ function draw() {
     document.getElementById('zone').textContent = MOB_RARITIES[getZoneInfo()].name;
 
     let list = `Petals (${player.petals.length}/${player.maxSlots})<br>`;
-    player.petals.forEach(p => list += `<span style="color:${p.rarity.color}">${PETAL_DEFS[p.key].name} ${p.rarity.name[0]}</span><br>`);
+    player.petals.forEach(p => list += `<span style="color:${p.rarity.color}">${PETAL_DEFS[p.key].emoji} ${p.rarity.name[0]}</span><br>`);
     document.getElementById('petalsList').innerHTML = list;
 
     if (gameOver) {
@@ -549,6 +573,7 @@ updatePlayerStats();
 recalcBonuses();
 for (let i=0;i<5;i++) player.petals.push({key:"basic", rarity:RARITIES[0], curDur:140});
 respawn();
+updateSlotBar();
 loop();
 </script>
 </body>
